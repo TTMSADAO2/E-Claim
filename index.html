@@ -10,6 +10,7 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   
   <style>
     :root { 
@@ -183,6 +184,34 @@
       .filter-box select, .btn-sync, .btn-export, .btn-search { flex: 1; text-align: center; justify-content: center; }
       .separator { display: none; }
       .ai-insight-box { flex-direction: column; }
+    }
+
+    /* สไตล์ปุ่มบันทึกภาพ */
+    .ai-content { flex: 1; min-width: 0; }
+    .ai-content h3, .section-headline, .chart-title, .reason-title { flex-wrap: wrap; }
+    .btn-snap {
+      margin-left: auto;
+      background: #f0f9ff;
+      color: #0284c7;
+      border: 1px solid #bae6fd;
+      padding: 5px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      font-family: 'Sarabun', sans-serif;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: 0.2s;
+      flex-shrink: 0;
+    }
+    .btn-snap:hover {
+      background: #0ea5e9;
+      color: #ffffff;
+      border-color: #0ea5e9;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 10px rgba(14, 165, 233, 0.25);
     }
   </style>
 </head>
@@ -1250,6 +1279,218 @@
       else { t.style.background = '#1e293b'; document.getElementById("toast-icon").className = 'fa-solid fa-info-circle'; }
       t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 4000); 
     }
+
+    // ================= ระบบบันทึกภาพแต่ละหัวข้อและกราฟ =================
+    function createSnapBtn(onClickFn) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-snap';
+      btn.setAttribute('data-html2canvas-ignore', 'true');
+      btn.innerHTML = '<i class="fa-solid fa-camera"></i> บันทึกภาพ';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onClickFn();
+      });
+      return btn;
+    }
+
+    function initSnapButtons() {
+      // 1. กล่องบทสรุปผู้บริหาร (Executive Summary)
+      const aiBox = document.querySelector('.ai-insight-box');
+      if (aiBox) {
+        const h3 = aiBox.querySelector('.ai-content h3');
+        if (h3) h3.appendChild(createSnapBtn(() => captureElement(aiBox, 'Executive_Summary')));
+      }
+
+      // 2. หมวดการ์ดสรุปผล (Performance View & Cost Accounting View)
+      document.querySelectorAll('#view-dash .section-headline').forEach(headline => {
+        const nextEl = headline.nextElementSibling;
+        if (nextEl && nextEl.classList.contains('dash-grid')) {
+          const wrapper = document.createElement('div');
+          wrapper.className = 'snap-section-wrap';
+          headline.parentNode.insertBefore(wrapper, headline);
+          wrapper.appendChild(headline);
+          wrapper.appendChild(nextEl);
+
+          const titleText = headline.innerText.trim();
+          headline.appendChild(createSnapBtn(() => captureElement(wrapper, titleText)));
+        }
+      });
+
+      // 3. กราฟทั้ง 7 ตัว
+      document.querySelectorAll('#view-dash .chart-card').forEach(card => {
+        const titleEl = card.querySelector('.chart-title');
+        if (titleEl) {
+          const titleText = titleEl.innerText.trim();
+          titleEl.appendChild(createSnapBtn(() => captureElement(card, titleText)));
+        }
+      });
+
+      // 4. ตารางสาเหตุทั้ง 2 หมวด
+      document.querySelectorAll('#view-dash .reason-section').forEach(sec => {
+        const titleEl = sec.querySelector('.reason-title');
+        if (titleEl) {
+          const titleText = titleEl.innerText.trim();
+          titleEl.appendChild(createSnapBtn(() => captureElement(sec, titleText)));
+        }
+      });
+
+      // 5. ตารางเจาะลึกรายการยา (Drilldown)
+      const drillBox = document.getElementById('drilldown-box');
+      if (drillBox) {
+        const closeBtn = drillBox.querySelector('button');
+        if (closeBtn && closeBtn.parentNode) {
+          const actionWrap = document.createElement('div');
+          actionWrap.style.cssText = 'display:flex; align-items:center; gap:12px;';
+          actionWrap.setAttribute('data-html2canvas-ignore', 'true');
+          closeBtn.parentNode.insertBefore(actionWrap, closeBtn);
+          actionWrap.appendChild(createSnapBtn(() => {
+            const titleText = document.getElementById('drill-title').innerText.trim();
+            captureElement(drillBox, titleText);
+          }));
+          actionWrap.appendChild(closeBtn);
+        }
+      }
+
+      // 6. ตารางประวัติรายยา (หน้า Drug Detail)
+      const drugCard = document.querySelector('#view-drug .chart-card');
+      if (drugCard) {
+        const h3 = drugCard.querySelector('h3');
+        if (h3) {
+          h3.style.cssText += '; display:flex; align-items:center; flex-wrap:wrap; gap:10px;';
+          h3.appendChild(createSnapBtn(() => {
+            const drugVal = document.getElementById('drugFilter').value;
+            const title = (drugVal && drugVal !== 'NONE') ? `ประวัติการจ่ายยา_${drugVal}` : 'ประวัติการจ่ายยา';
+            captureElement(drugCard, title);
+          }));
+        }
+      }
+    }
+
+    async function captureElement(targetEl, rawTitle) {
+      if (typeof html2canvas === 'undefined') {
+        showToast("ไม่พบไลบรารี html2canvas กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต", "error");
+        return;
+      }
+
+      showToast("กำลังสร้างไฟล์ภาพ...", "info");
+
+      // ดึงค่าตัวกรองปัจจุบันมาแสดงท้ายภาพ
+      const isDrugView = !!targetEl.closest('#view-drug');
+      const fundSel = document.getElementById('fundPeriod');
+      const startSel = document.getElementById(isDrugView ? 'startPeriodDrug' : 'startPeriod');
+      const endSel = document.getElementById(isDrugView ? 'endPeriodDrug' : 'endPeriod');
+
+      const fundText = fundSel ? fundSel.options[fundSel.selectedIndex].text.replace('📌 ', '').trim() : 'ทั้งหมด';
+      const startText = startSel ? startSel.options[startSel.selectedIndex].text.trim() : 'ทั้งหมด';
+      const endText = endSel ? endSel.options[endSel.selectedIndex].text.trim() : 'ทั้งหมด';
+      const periodText = (startText === endText) ? startText : `${startText} ถึง ${endText}`;
+      const nowStr = new Date().toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+
+      const isSectionWrap = targetEl.classList.contains('snap-section-wrap');
+      const bg = isSectionWrap ? '#f8fafc' : '#ffffff';
+
+      // คำนวณความกว้างเผื่อกรณีตารางกว้างเกินหน้าจอ (เช่น เปิดบนมือถือ)
+      let targetW = targetEl.offsetWidth;
+      targetEl.querySelectorAll('.table-responsive table').forEach(tb => {
+        if (tb.scrollWidth + 60 > targetW) targetW = tb.scrollWidth + 60;
+      });
+
+      // สร้างพื้นที่จำลองชั่วคราวเพื่อให้แคปภาพได้ครบทั้งแนวตั้งและแนวนอนไม่ถูกตัดขอบ
+      const stage = document.createElement('div');
+      stage.style.cssText = `
+        position: fixed; top: 0; left: 0; z-index: -1; pointer-events: none;
+        width: ${targetW + (isSectionWrap ? 40 : 0)}px;
+        background: ${bg};
+        padding: ${isSectionWrap ? '20px' : '0'};
+        box-sizing: border-box;
+      `;
+
+      const clone = targetEl.cloneNode(true);
+      clone.style.margin = '0';
+      clone.style.boxShadow = 'none';
+
+      // คัดลอกภาพกราฟจาก Canvas ต้นฉบับลงในตัวจำลอง
+      const origCanvases = targetEl.querySelectorAll('canvas');
+      const cloneCanvases = clone.querySelectorAll('canvas');
+      origCanvases.forEach((origC, idx) => {
+        const destC = cloneCanvases[idx];
+        if (destC) {
+          destC.width = origC.width;
+          destC.height = origC.height;
+          destC.getContext('2d').drawImage(origC, 0, 0);
+        }
+      });
+
+      // ลบปุ่มบันทึกภาพและปุ่มปิด (X) ออกจากภาพที่จะเซฟ
+      clone.querySelectorAll('[data-html2canvas-ignore="true"]').forEach(el => el.remove());
+
+      // ปลดล็อกแถบเลื่อนแนวนอนของตารางให้เห็นครบทุกคอลัมน์
+      clone.querySelectorAll('.table-responsive').forEach(tr => {
+        tr.style.overflow = 'visible';
+      });
+
+      if (isSectionWrap) {
+        const hl = clone.querySelector('.section-headline');
+        if (hl) hl.style.marginTop = '0';
+      }
+
+      // เพิ่มแถบข้อมูลอ้างอิงด้านล่างภาพ
+      const footer = document.createElement('div');
+      footer.style.cssText = `
+        margin-top: 16px; padding-top: 10px; border-top: 1px dashed #cbd5e1;
+        font-size: 12px; color: #64748b; display: flex; justify-content: space-between;
+        flex-wrap: wrap; gap: 8px; font-family: 'Sarabun', sans-serif;
+      `;
+      footer.innerHTML = `
+        <span><b>E-Claim TTM Cost Analytics</b> | สิทธิ: ${fundText} | ช่วงเวลา: ${periodText}</span>
+        <span>บันทึกเมื่อ: ${nowStr}</span>
+      `;
+      clone.appendChild(footer);
+
+      stage.appendChild(clone);
+      document.body.appendChild(stage);
+
+      try {
+        const w = Math.max(stage.scrollWidth, stage.offsetWidth);
+        const h = stage.scrollHeight;
+
+        const canvas = await html2canvas(stage, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: bg,
+          width: w,
+          height: h,
+          windowWidth: w + 40,
+          windowHeight: h + 40,
+          scrollX: 0,
+          scrollY: 0,
+          logging: false
+        });
+
+        const safeName = (rawTitle || 'EClaim_Capture')
+          .replace(/[\\/:*?"<>|]/g, '')
+          .replace(/\s+/g, '_')
+          .substring(0, 70);
+
+        const link = document.createElement('a');
+        link.download = `${safeName}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showToast("บันทึกภาพเรียบร้อยแล้ว!", "success");
+      } catch (err) {
+        console.error(err);
+        showToast("ไม่สามารถบันทึกภาพได้: " + err.message, "error");
+      } finally {
+        document.body.removeChild(stage);
+      }
+    }
+
+    // สร้างปุ่มบันทึกภาพอัตโนมัติเมื่อโหลดหน้าเว็บเสร็จ
+    window.addEventListener('DOMContentLoaded', initSnapButtons);
   </script>
 </body>
 </html>
