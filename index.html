@@ -1409,7 +1409,10 @@
       const clone = targetEl.cloneNode(true);
       clone.style.margin = '0';
       clone.style.boxShadow = 'none';
-
+// --- เพิ่ม 3 บรรทัดนี้เพื่อแก้ปัญหาภาพจาง ---
+      clone.style.animation = 'none';
+      clone.style.opacity = '1';
+      clone.style.transform = 'none';
       // คัดลอกภาพกราฟจาก Canvas ต้นฉบับลงในตัวจำลอง
       const origCanvases = targetEl.querySelectorAll('canvas');
       const cloneCanvases = clone.querySelectorAll('canvas');
